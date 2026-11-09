@@ -1,55 +1,47 @@
 #include <cstdint>
 
+__attribute__((noinline))
 void test1() {
-    alignas(4) char buffer[16] = {};
+  alignas(4) char buffer[16] = {};
 
-    uint32_t *p = (uint32_t *)&buffer[1];
+  uint32_t *p = (uint32_t *)&buffer[1];
 
-    (void)*p;
+  volatile uint32_t value = *p;
 }
 
+__attribute__((noinline))
 void test2() {
-    alignas(4) char buffer[16] = {};
+  alignas(4) char buffer[16] = {};
 
-    uint32_t *p =
-        reinterpret_cast<uint32_t *>(&buffer[1]);
+  uint32_t *p =
+      reinterpret_cast<uint32_t *>(&buffer[1]);
 
-    (void)*p;
+  volatile uint32_t value = *p;
 }
 
+__attribute__((noinline))
 void test3(char *data, unsigned offset) {
-    uint32_t *p =
-        reinterpret_cast<uint32_t *>(data + offset);
+  uint32_t *p =
+      reinterpret_cast<uint32_t *>(data + offset);
 
-    (void)*p;
+  volatile uint32_t value = *p;
 }
 
 struct alignas(16) Header {
-    uint64_t value;
+  uint64_t value;
 };
 
+__attribute__((noinline))
 void test4(char *data) {
-    Header *header =
-        reinterpret_cast<Header *>(data);
+  Header *header =
+      reinterpret_cast<Header *>(data);
 
-    (void)header->value;
+  volatile uint64_t value = header->value;
 }
 
+__attribute__((noinline))
 void test5(void *data) {
-    int *p = static_cast<int *>(data);
+  int *p = static_cast<int *>(data);
 
-    (void)*p;
-}
-
-int main() {
-    alignas(4) char buffer1[16] = {};
-    alignas(16) char buffer2[32] = {};
-
-    test1();
-    test2();
-    test3(buffer1, 1);
-    test4(buffer2 + 1);
-    test5(buffer1 + 1);
-
-    return 0;
+  volatile int value = *p;
 }

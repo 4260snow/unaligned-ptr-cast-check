@@ -10,24 +10,16 @@ namespace clang {
 namespace tidy {
 namespace bugprone {
 
-void MisalignedPointerCastCheck::registerMatchers(
-    MatchFinder *Finder) {
-
+void MisalignedPointerCastCheck::registerMatchers(MatchFinder *Finder) {
   Finder->addMatcher(
-      castExpr(
-          hasSourceExpression(expr().bind("source")))
-          .bind("target"),
+      castExpr(hasSourceExpression(expr().bind("source"))).bind("target"),
       this);
 }
 
-void MisalignedPointerCastCheck::check(
-    const MatchFinder::MatchResult &Result) {
+void MisalignedPointerCastCheck::check(const MatchFinder::MatchResult &Result) {
+  const auto *Source = Result.Nodes.getNodeAs<Expr>("source");
 
-  const auto *Source =
-      Result.Nodes.getNodeAs<Expr>("source");
-
-  const auto *Target =
-      Result.Nodes.getNodeAs<CastExpr>("target");
+  const auto *Target = Result.Nodes.getNodeAs<CastExpr>("target");
 
   if (!Source || !Target)
     return;
@@ -35,19 +27,15 @@ void MisalignedPointerCastCheck::check(
   QualType SourceType = Source->getType();
   QualType TargetType = Target->getType();
 
-  if (!SourceType->isPointerType() ||
-      !TargetType->isPointerType())
+  if (!SourceType->isPointerType() || !TargetType->isPointerType())
     return;
 
-  if (SourceType->isDependentType() ||
-      TargetType->isDependentType())
+  if (SourceType->isDependentType() || TargetType->isDependentType())
     return;
 
-  QualType SourcePointedType =
-      SourceType->getPointeeType();
+  QualType SourcePointedType = SourceType->getPointeeType();
 
-  QualType TargetPointedType =
-      TargetType->getPointeeType();
+  QualType TargetPointedType = TargetType->getPointeeType();
 
   if (SourcePointedType->isIncompleteType() ||
       TargetPointedType->isIncompleteType())
@@ -65,11 +53,9 @@ void MisalignedPointerCastCheck::check(
   if (Target->getCastKind() != CK_BitCast)
     return;
 
-  diag(Target->getBeginLoc(),
-       "pointer cast increases required alignment "
-       "from %0 to %1 bytes")
-      << SourceAlign.getQuantity()
-      << TargetAlign.getQuantity();
+  diag(Target->getBeginLoc(), "pointer cast increases required alignment "
+                              "from %0 to %1 bytes")
+      << SourceAlign.getQuantity() << TargetAlign.getQuantity();
 }
 
 } // namespace bugprone
