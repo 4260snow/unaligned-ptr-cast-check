@@ -52,6 +52,9 @@ add_clang_library(clangTidyBugproneModule STATIC
   LambdaFunctionNameCheck.cpp
   MacroParenthesesCheck.cpp
   MacroRepeatedSideEffectsCheck.cpp
+  # hack
+  MisalignedPointerCastCheck.cpp
+  #
   MisleadingSetterOfReferenceCheck.cpp
   MisplacedOperatorInStrlenInAllocCheck.cpp
   MisplacedPointerArithmeticInAllocCheck.cpp
