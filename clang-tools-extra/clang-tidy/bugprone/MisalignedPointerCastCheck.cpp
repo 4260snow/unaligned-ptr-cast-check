@@ -53,9 +53,10 @@ void MisalignedPointerCastCheck::check(const MatchFinder::MatchResult &Result) {
   if (Target->getCastKind() != CK_BitCast)
     return;
 
-  diag(Target->getBeginLoc(), "pointer cast increases required alignment "
-                              "from %0 to %1 bytes")
-      << SourceAlign.getQuantity() << TargetAlign.getQuantity();
+  diag(Target->getBeginLoc(), "casting from type %0 (alignment %1) to type %2 "
+                              "(alignment %3) increases required alignment")
+      << SourcePointedType << SourceAlign.getQuantity() << TargetPointedType
+      << TargetAlign.getQuantity();
 }
 
 } // namespace bugprone
