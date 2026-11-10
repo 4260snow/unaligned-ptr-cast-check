@@ -95,37 +95,41 @@ static Alignment analyzeIntegerExpression(const Expr *E, ASTContext &Context,
   if (Depth > 16 || !(E = ignoreCasts(E)))
     return 0;
 
-  if (const auto *BO = dyn_cast<BinaryOperator>(E)) {
-    if (BO->getOpcode() == BO_Add || BO->getOpcode() == BO_Sub) {
-      Alignment Base =
-          analyzeIntegerExpression(BO->getLHS(), Context, Depth + 1);
-      if (!Base)
-        return 0;
-
-      auto Offset = getConstantValue(BO->getRHS(), Context);
-      if (!Offset)
-        return 1;
-
-      int64_t Value = *Offset;
-      if (BO->getOpcode() == BO_Sub)
-        Value = -Value;
-
-      return applyOffset(Base, Value);
-    }
-  }
-
   if (const auto *CE = dyn_cast<CastExpr>(E)) {
     const Expr *Sub = CE->getSubExpr();
 
-    return Sub->getType()->isPointerType()
-               ? getGuaranteedAlignment(Sub, Context, Depth + 1)
-               : analyzeIntegerExpression(Sub, Context, Depth + 1);
+    if (Sub->getType()->isPointerType())
+      return getGuaranteedAlignment(Sub, Context, Depth + 1);
+
+    if (Sub->getType()->isIntegerType())
+      return analyzeIntegerExpression(Sub, Context, Depth + 1);
   }
 
-  if (const auto *DRE = dyn_cast<DeclRefExpr>(E))
-    if (const auto *VD = dyn_cast<VarDecl>(DRE->getDecl()))
+  if (const auto *BO = dyn_cast<BinaryOperator>(E)) {
+    if (BO->getOpcode() != BO_Add && BO->getOpcode() != BO_Sub)
+      return 0;
+
+    Alignment Base = analyzeIntegerExpression(BO->getLHS(), Context, Depth + 1);
+    if (!Base)
+      return 0;
+
+    auto Offset = getConstantValue(BO->getRHS(), Context);
+    if (!Offset)
+      return 1;
+
+    int64_t Value = *Offset;
+    if (BO->getOpcode() == BO_Sub)
+      Value = -Value;
+
+    return applyOffset(Base, Value);
+  }
+
+  if (const auto *DRE = dyn_cast<DeclRefExpr>(E)) {
+    if (const auto *VD = dyn_cast<VarDecl>(DRE->getDecl())) {
       if (VD->hasInit())
         return analyzeIntegerExpression(VD->getInit(), Context, Depth + 1);
+    }
+  }
 
   return 0;
 }
@@ -185,12 +189,12 @@ static Alignment getGuaranteedAlignment(const Expr *E, ASTContext &Context,
     }
   }
 
+  if (E->getType()->isIntegerType())
+    return analyzeIntegerExpression(E, Context, Depth + 1);
+
   if (const auto *BO = dyn_cast<BinaryOperator>(E))
     if (BO->getOpcode() == BO_Add || BO->getOpcode() == BO_Sub)
       return analyzePointerArithmetic(BO, Context, Depth);
-
-  if (E->getType()->isIntegerType())
-    return analyzeIntegerExpression(E, Context, Depth + 1);
 
   if (const auto *CE = dyn_cast<CastExpr>(E)) {
     const Expr *Sub = CE->getSubExpr();

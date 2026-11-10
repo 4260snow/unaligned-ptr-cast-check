@@ -1,4 +1,3 @@
-
 // RUN: %check_clang_tidy %s bugprone-misaligned-pointer-cast %t
 
 #include <cstdint>
@@ -75,6 +74,15 @@ void test20() {
 
   void *raw = &buffer[1];
   Header *p = static_cast<Header *>(raw);
+  (void)p;
+}
+
+// Misaligned address produced through integer arithmetic.
+void test21() {
+  alignas(Header) char buffer[2 * sizeof(Header)];
+
+  __UINTPTR_TYPE__ address = reinterpret_cast<__UINTPTR_TYPE__>(buffer);
+  Header *p = reinterpret_cast<Header *>(address + 1);
   (void)p;
 }
 
@@ -180,14 +188,4 @@ void test19() {
   uint32_t *p = static_cast<uint32_t *>(raw);
   (void)p;
   std::free(raw);
-}
-
-// FIXME: False negative.
-// Misaligned address produced through integer arithmetic.
-void test21() {
-  alignas(Header) char buffer[2 * sizeof(Header)];
-
-  __UINTPTR_TYPE__ address = reinterpret_cast<__UINTPTR_TYPE__>(buffer);
-  Header *p = reinterpret_cast<Header *>(address + 1);
-  (void)p;
 }
