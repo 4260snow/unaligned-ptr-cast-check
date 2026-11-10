@@ -69,6 +69,15 @@ void test7(char *data) {
   (void)p;
 }
 
+// Misaligned address hidden behind void*.
+void test20() {
+  alignas(Header) char buffer[2 * sizeof(Header)];
+
+  void *raw = &buffer[1];
+  Header *p = static_cast<Header *>(raw);
+  (void)p;
+}
+
 //===----------------------------------------------------------------------===//
 // Negative: cases that should not be diagnosed.
 //===----------------------------------------------------------------------===//
@@ -149,11 +158,6 @@ void test17(const uint32_t *data) {
   (void)p;
 }
 
-//===----------------------------------------------------------------------===//
-// Known limitations of the current PoC.
-//===----------------------------------------------------------------------===//
-
-// FIXME: False positive.
 // The buffer is explicitly aligned, and its base address is suitable
 // for uint32_t. The current checker only compares pointee type alignment.
 void test18() {
@@ -164,7 +168,11 @@ void test18() {
   (void)p;
 }
 
-// FIXME: False negative / unknown provenance.
+//===----------------------------------------------------------------------===//
+// Known limitations of the current PoC.
+//===----------------------------------------------------------------------===//
+
+// FIXME: False positive.
 // malloc returns suitably aligned storage for types with fundamental
 // alignment requirements, but the checker skips void* casts.
 void test19() {
@@ -172,16 +180,6 @@ void test19() {
   uint32_t *p = static_cast<uint32_t *>(raw);
   (void)p;
   std::free(raw);
-}
-
-// FIXME: False negative.
-// Misaligned address hidden behind void*.
-void test20() {
-  alignas(Header) char buffer[2 * sizeof(Header)];
-
-  void *raw = &buffer[1];
-  Header *p = static_cast<Header *>(raw);
-  (void)p;
 }
 
 // FIXME: False negative.
