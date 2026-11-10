@@ -44,12 +44,37 @@ void test4(char *data) {
   (void)header;
 }
 
+// Qualified byte pointer: same alignment escalation.
+void test5(const volatile unsigned char *data) {
+  // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
+  const volatile uint32_t *p = reinterpret_cast<const volatile uint32_t *>(data);
+  (void)p;
+}
+
+struct alignas(8) AlignedBlock {
+  char data[16];
+};
+
+// Same size, but alignment increases from 8 to 16.
+void test6(AlignedBlock *data) {
+  // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment from 8 to 16 bytes
+  Header *p = reinterpret_cast<Header *>(data);
+  (void)p;
+}
+
+// Array destination: alignment follows the element type.
+void test7(char *data) {
+  // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
+  uint32_t (*p)[4] = reinterpret_cast<uint32_t (*)[4]>(data);
+  (void)p;
+}
+
 //===----------------------------------------------------------------------===//
 // Negative: cases that should not be diagnosed.
 //===----------------------------------------------------------------------===//
 
 // No alignment escalation.
-void test5() {
+void test8() {
   char buffer[16];
 
   char *p = &buffer[1];
@@ -58,7 +83,7 @@ void test5() {
 
 // void* source: its original pointee type and alignment are unknown.
 // The current checker intentionally skips this case.
-void test6(void *data) {
+void test9(void *data) {
   int *p = static_cast<int *>(data);
   (void)p;
 }
@@ -66,7 +91,7 @@ void test6(void *data) {
 // Incomplete source type.
 struct Incomplete;
 
-void test7(Incomplete *data) {
+void test10(Incomplete *data) {
   int *p = reinterpret_cast<int *>(data);
   (void)p;
 }
@@ -76,7 +101,7 @@ using Function = int (*)();
 
 int function();
 
-void test8() {
+void test11() {
   Function p = reinterpret_cast<Function>(&function);
   (void)p;
 }
@@ -84,7 +109,7 @@ void test8() {
 // Same alignment requirements: this is not an alignment issue.
 // It may be an object representation / aliasing issue, but that is
 // outside the scope of this checker.
-void test9(int *data) {
+void test12(int *data) {
   float *p = reinterpret_cast<float *>(data);
   (void)p;
 }
@@ -95,8 +120,32 @@ struct Bytes {
   char data[8];
 };
 
-void test10(char *data) {
+void test13(char *data) {
   Bytes *p = reinterpret_cast<Bytes *>(data);
+  (void)p;
+}
+
+// Decreasing alignment requirements.
+void test14(Header *data) {
+  AlignedBlock *p = reinterpret_cast<AlignedBlock *>(data);
+  (void)p;
+}
+
+// Incomplete destination type.
+void test15(char *data) {
+  Incomplete *p = reinterpret_cast<Incomplete *>(data);
+  (void)p;
+}
+
+// Conversion to void*.
+void test16(Header *data) {
+  void *p = static_cast<void *>(data);
+  (void)p;
+}
+
+// const_cast: no alignment change.
+void test17(const uint32_t *data) {
+  uint32_t *p = const_cast<uint32_t *>(data);
   (void)p;
 }
 
@@ -107,7 +156,7 @@ void test10(char *data) {
 // FIXME: False positive.
 // The buffer is explicitly aligned, and its base address is suitable
 // for uint32_t. The current checker only compares pointee type alignment.
-void test11() {
+void test18() {
   alignas(16) char buffer[16];
 
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
@@ -118,9 +167,29 @@ void test11() {
 // FIXME: False negative / unknown provenance.
 // malloc returns suitably aligned storage for types with fundamental
 // alignment requirements, but the checker skips void* casts.
-void test12() {
+void test19() {
   void *raw = std::malloc(sizeof(uint32_t));
   uint32_t *p = static_cast<uint32_t *>(raw);
   (void)p;
   std::free(raw);
+}
+
+// FIXME: False negative.
+// Misaligned address hidden behind void*.
+void test20() {
+  alignas(Header) char buffer[2 * sizeof(Header)];
+
+  void *raw = &buffer[1];
+  Header *p = static_cast<Header *>(raw);
+  (void)p;
+}
+
+// FIXME: False negative.
+// Misaligned address produced through integer arithmetic.
+void test21() {
+  alignas(Header) char buffer[2 * sizeof(Header)];
+
+  __UINTPTR_TYPE__ address = reinterpret_cast<__UINTPTR_TYPE__>(buffer);
+  Header *p = reinterpret_cast<Header *>(address + 1);
+  (void)p;
 }
