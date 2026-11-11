@@ -3,6 +3,8 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Expr.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
+#include "clang/Basic/TargetInfo.h"
+#include "llvm/ADT/StringRef.h"
 
 #include <cstdint>
 #include <optional>
@@ -28,6 +30,18 @@ static Alignment gcdAlignment(Alignment A, Alignment B) {
 
 static const Expr *ignoreCasts(const Expr *E) {
   return E ? E->IgnoreParenImpCasts() : nullptr;
+}
+
+static bool isAllocationFunction(const FunctionDecl *FD) {
+  if (!FD || !FD->getIdentifier() || !FD->isExternC())
+    return false;
+
+  if (FD->getBuiltinID() == 0)
+    return false;
+
+  llvm::StringRef Name = FD->getName();
+
+  return Name == "malloc" || Name == "calloc" || Name == "realloc";
 }
 
 static std::optional<int64_t> getConstantValue(const Expr *E,
@@ -186,6 +200,13 @@ static Alignment getGuaranteedAlignment(const Expr *E, ASTContext &Context,
       if (const auto *DRE = dyn_cast<DeclRefExpr>(Operand))
         if (const auto *VD = dyn_cast<VarDecl>(DRE->getDecl()))
           return Context.getDeclAlign(VD).getQuantity();
+    }
+  }
+
+  if (const auto *Call = dyn_cast<CallExpr>(E)) {
+    if (isAllocationFunction(Call->getDirectCallee())) {
+      const TargetInfo &Target = Context.getTargetInfo();
+      return Target.getNewAlign() / Target.getCharWidth();
     }
   }
 

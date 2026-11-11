@@ -1,4 +1,4 @@
-// RUN: %check_clang_tidy %s bugprone-misaligned-pointer-cast %t
+ // RUN: %check_clang_tidy %s bugprone-misaligned-pointer-cast %t
 
 #include <cstdint>
 #include <cstdlib>
@@ -8,7 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 // C-style cast: char (alignment 1) -> uint32_t (typically alignment 4).
-void test1() {
+void c_style_cast_increases_alignment() {
   alignas(4) char buffer[16] = {};
 
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
@@ -17,7 +17,7 @@ void test1() {
 }
 
 // C++ reinterpret_cast: same alignment escalation.
-void test2() {
+void reinterpret_cast_increases_alignment() {
   alignas(4) char buffer[16] = {};
 
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
@@ -26,7 +26,7 @@ void test2() {
 }
 
 // Pointer arithmetic: the actual offset is unknown to the checker.
-void test3(char *data, unsigned offset) {
+void pointer_arithmetic_increases_alignment(char *data, unsigned offset) {
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
   uint32_t *p = reinterpret_cast<uint32_t *>(data + offset);
   (void)p;
@@ -37,14 +37,14 @@ struct alignas(16) Header {
   uint64_t value;
 };
 
-void test4(char *data) {
+void cast_to_overaligned_type(char *data) {
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
   Header *header = reinterpret_cast<Header *>(data);
   (void)header;
 }
 
 // Qualified byte pointer: same alignment escalation.
-void test5(const volatile unsigned char *data) {
+void qualified_byte_pointer_cast(const volatile unsigned char *data) {
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
   const volatile uint32_t *p = reinterpret_cast<const volatile uint32_t *>(data);
   (void)p;
@@ -55,21 +55,21 @@ struct alignas(8) AlignedBlock {
 };
 
 // Same size, but alignment increases from 8 to 16.
-void test6(AlignedBlock *data) {
+void cast_increases_alignment_from_8_to_16(AlignedBlock *data) {
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment from 8 to 16 bytes
   Header *p = reinterpret_cast<Header *>(data);
   (void)p;
 }
 
 // Array destination: alignment follows the element type.
-void test7(char *data) {
+void cast_to_array_pointer_increases_alignment(char *data) {
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
   uint32_t (*p)[4] = reinterpret_cast<uint32_t (*)[4]>(data);
   (void)p;
 }
 
 // Misaligned address hidden behind void*.
-void test20() {
+void misaligned_address_through_void_pointer() {
   alignas(Header) char buffer[2 * sizeof(Header)];
 
   void *raw = &buffer[1];
@@ -78,7 +78,7 @@ void test20() {
 }
 
 // Misaligned address produced through integer arithmetic.
-void test21() {
+void misaligned_address_through_integer_arithmetic() {
   alignas(Header) char buffer[2 * sizeof(Header)];
 
   __UINTPTR_TYPE__ address = reinterpret_cast<__UINTPTR_TYPE__>(buffer);
@@ -91,7 +91,7 @@ void test21() {
 //===----------------------------------------------------------------------===//
 
 // No alignment escalation.
-void test8() {
+void cast_preserves_alignment() {
   char buffer[16];
 
   char *p = &buffer[1];
@@ -100,7 +100,7 @@ void test8() {
 
 // void* source: its original pointee type and alignment are unknown.
 // The current checker intentionally skips this case.
-void test9(void *data) {
+void cast_from_void_pointer(void *data) {
   int *p = static_cast<int *>(data);
   (void)p;
 }
@@ -108,7 +108,7 @@ void test9(void *data) {
 // Incomplete source type.
 struct Incomplete;
 
-void test10(Incomplete *data) {
+void cast_from_incomplete_source_type(Incomplete *data) {
   int *p = reinterpret_cast<int *>(data);
   (void)p;
 }
@@ -118,7 +118,7 @@ using Function = int (*)();
 
 int function();
 
-void test11() {
+void function_pointer_cast() {
   Function p = reinterpret_cast<Function>(&function);
   (void)p;
 }
@@ -126,7 +126,7 @@ void test11() {
 // Same alignment requirements: this is not an alignment issue.
 // It may be an object representation / aliasing issue, but that is
 // outside the scope of this checker.
-void test12(int *data) {
+void cast_between_types_with_same_alignment(int *data) {
   float *p = reinterpret_cast<float *>(data);
   (void)p;
 }
@@ -137,38 +137,38 @@ struct Bytes {
   char data[8];
 };
 
-void test13(char *data) {
+void cast_to_same_alignment_struct(char *data) {
   Bytes *p = reinterpret_cast<Bytes *>(data);
   (void)p;
 }
 
 // Decreasing alignment requirements.
-void test14(Header *data) {
+void cast_decreases_alignment_requirement(Header *data) {
   AlignedBlock *p = reinterpret_cast<AlignedBlock *>(data);
   (void)p;
 }
 
 // Incomplete destination type.
-void test15(char *data) {
+void cast_to_incomplete_destination_type(char *data) {
   Incomplete *p = reinterpret_cast<Incomplete *>(data);
   (void)p;
 }
 
 // Conversion to void*.
-void test16(Header *data) {
+void cast_to_void_pointer(Header *data) {
   void *p = static_cast<void *>(data);
   (void)p;
 }
 
 // const_cast: no alignment change.
-void test17(const uint32_t *data) {
+void const_cast_preserves_alignment(const uint32_t *data) {
   uint32_t *p = const_cast<uint32_t *>(data);
   (void)p;
 }
 
 // The buffer is explicitly aligned, and its base address is suitable
 // for uint32_t. The current checker only compares pointee type alignment.
-void test18() {
+void explicitly_aligned_buffer_cast() {
   alignas(16) char buffer[16];
 
   // CHECK-MESSAGES: :[[@LINE+1]]:{{[0-9]+}}: warning: pointer cast increases required alignment
@@ -176,16 +176,15 @@ void test18() {
   (void)p;
 }
 
-//===----------------------------------------------------------------------===//
-// Known limitations of the current PoC.
-//===----------------------------------------------------------------------===//
-
-// FIXME: False positive.
 // malloc returns suitably aligned storage for types with fundamental
 // alignment requirements, but the checker skips void* casts.
-void test19() {
+void malloc_aligned_storage_cast() {
   void *raw = std::malloc(sizeof(uint32_t));
   uint32_t *p = static_cast<uint32_t *>(raw);
   (void)p;
   std::free(raw);
 }
+
+//===----------------------------------------------------------------------===//
+// Known limitations of the current PoC.
+//===----------------------------------------------------------------------===//
