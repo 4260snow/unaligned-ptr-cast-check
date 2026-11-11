@@ -1,4 +1,4 @@
- // RUN: %check_clang_tidy %s bugprone-misaligned-pointer-cast %t
+// RUN: %check_clang_tidy %s bugprone-misaligned-pointer-cast %t
 
 #include <cstdint>
 #include <cstdlib>

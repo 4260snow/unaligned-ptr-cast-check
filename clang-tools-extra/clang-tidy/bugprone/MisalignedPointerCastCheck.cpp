@@ -1,13 +1,14 @@
 #include "MisalignedPointerCastCheck.h"
 
-#include "clang/AST/ASTContext.h"
 #include "clang/AST/Expr.h"
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Basic/TargetInfo.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/StringRef.h"
 
 #include <cstdint>
 #include <optional>
+#include <utility>
 
 using namespace clang::ast_matchers;
 
@@ -50,10 +51,16 @@ static std::optional<int64_t> getConstantValue(const Expr *E,
     return std::nullopt;
 
   Expr::EvalResult Result;
+
   if (!E->EvaluateAsInt(Result, Context))
     return std::nullopt;
 
-  return Result.Val.getInt().getSExtValue();
+  const llvm::APSInt &Value = Result.Val.getInt();
+
+  if (!Value.isSignedIntN(64))
+    return std::nullopt;
+
+  return Value.getSExtValue();
 }
 
 static Alignment applyOffset(Alignment Base, int64_t Offset) {
@@ -64,6 +71,22 @@ static Alignment applyOffset(Alignment Base, int64_t Offset) {
       Offset < 0 ? uint64_t(-(Offset + 1)) + 1 : uint64_t(Offset);
 
   return gcdAlignment(Base, AbsOffset);
+}
+
+static std::optional<int64_t>
+getByteOffset(int64_t Offset, uint64_t ElementSize, bool Subtract = false) {
+  llvm::APInt OffsetValue(128, static_cast<uint64_t>(Offset), true);
+  llvm::APInt SizeValue(128, ElementSize);
+
+  llvm::APInt Product = OffsetValue * SizeValue;
+
+  if (Subtract)
+    Product = -Product;
+
+  if (!Product.isSignedIntN(64))
+    return std::nullopt;
+
+  return Product.getSExtValue();
 }
 
 static Alignment getGuaranteedAlignment(const Expr *E, ASTContext &Context,
@@ -97,16 +120,19 @@ static Alignment analyzePointerArithmetic(const BinaryOperator *BO,
   if (!Offset)
     return gcdAlignment(Base, ElementSize);
 
-  int64_t ByteOffset = *Offset * static_cast<int64_t>(ElementSize);
-  if (BO->getOpcode() == BO_Sub)
-    ByteOffset = -ByteOffset;
+  auto ByteOffset =
+      getByteOffset(*Offset, ElementSize, BO->getOpcode() == BO_Sub);
 
-  return applyOffset(Base, ByteOffset);
+  if (!ByteOffset)
+    return 1;
+
+  return applyOffset(Base, *ByteOffset);
 }
 
 static Alignment analyzeIntegerExpression(const Expr *E, ASTContext &Context,
                                           unsigned Depth) {
-  if (Depth > 16 || !(E = ignoreCasts(E)))
+  if (Depth > 16 || !(E = ignoreCasts(E)) || E->isTypeDependent() ||
+      E->getType()->isDependentType())
     return 0;
 
   if (const auto *CE = dyn_cast<CastExpr>(E)) {
@@ -150,7 +176,8 @@ static Alignment analyzeIntegerExpression(const Expr *E, ASTContext &Context,
 
 static Alignment getGuaranteedAlignment(const Expr *E, ASTContext &Context,
                                         unsigned Depth) {
-  if (Depth > 16 || !(E = ignoreCasts(E)))
+  if (Depth > 16 || !(E = ignoreCasts(E)) || E->isTypeDependent() ||
+      E->getType()->isDependentType())
     return 0;
 
   if (const auto *DRE = dyn_cast<DeclRefExpr>(E)) {
@@ -190,11 +217,21 @@ static Alignment getGuaranteedAlignment(const Expr *E, ASTContext &Context,
 
         uint64_t ElementSize =
             Context.getTypeSizeInChars(ElementType).getQuantity();
+
+        if (!ElementSize)
+          return 1;
+
         auto Index = getConstantValue(ASE->getIdx(), Context);
 
-        return Index ? applyOffset(Base,
-                                   *Index * static_cast<int64_t>(ElementSize))
-                     : gcdAlignment(Base, ElementSize);
+        if (!Index)
+          return gcdAlignment(Base, ElementSize);
+
+        auto ByteOffset = getByteOffset(*Index, ElementSize);
+
+        if (!ByteOffset)
+          return 1;
+
+        return applyOffset(Base, *ByteOffset);
       }
 
       if (const auto *DRE = dyn_cast<DeclRefExpr>(Operand))
