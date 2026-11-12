@@ -1,5 +1,8 @@
 # DevDays F2026 - #104 unaligned-ptr-cast-check
 
+[Ссылка на презентацию](https://docs.google.com/presentation/d/1jgbYJ8Thz0qmmFzTAorURpLIn7NYrscEJrCdKwXcGxk)
+[Ссылка на видео](https://drive.google.com/file/d/1-7fDoFTZxFhSFg6uKjlpw30Bg9QOnwRe/view?usp=sharing)
+
 ## Описание проекта
 
 Проект представляет собой разработку диагностического модуля MisalignedPointerCastCheck для статического анализатора исходного кода Clang-Tidy, предназначенного для выявления потенциально небезопасных преобразований типов указателей, которые могут привести к нарушению требований выравнивания памяти (misaligned access).
