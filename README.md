@@ -1,44 +1,51 @@
-# The LLVM Compiler Infrastructure
+# DevDays F2026 - #104 unaligned-ptr-cast-check
 
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/llvm/llvm-project/badge)](https://securityscorecards.dev/viewer/?uri=github.com/llvm/llvm-project)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/8273/badge)](https://www.bestpractices.dev/projects/8273)
-[![libc++](https://github.com/llvm/llvm-project/actions/workflows/libcxx-pr-conformance-tests.yaml/badge.svg?branch=main&event=schedule)](https://github.com/llvm/llvm-project/actions/workflows/libcxx-pr-conformance-tests.yaml?query=event%3Aschedule)
+## Описание проекта
 
-Welcome to the LLVM project!
+Проект представляет собой разработку диагностического модуля MisalignedPointerCastCheck для статического анализатора исходного кода Clang-Tidy, предназначенного для выявления потенциально небезопасных преобразований типов указателей, которые могут привести к нарушению требований выравнивания памяти (misaligned access).
 
-This repository contains the source code for LLVM, a toolkit for the
-construction of highly optimized compilers, optimizers, and run-time
-environments.
+Основная задача модуля заключается в анализе операций приведения типов указателей и определении того, гарантирует ли исходный указатель достаточное выравнивание памяти для целевого типа. Если гарантированное выравнивание исходного адреса оказывается меньше требуемого выравнивания целевого типа, анализатор формирует диагностическое предупреждение о возможном некорректном доступе к памяти.
 
-The LLVM project has multiple components. The core of the project is
-itself called "LLVM". This contains all of the tools, libraries, and header
-files needed to process intermediate representations and convert them into
-object files. Tools include an assembler, disassembler, bitcode analyzer, and
-bitcode optimizer.
+Для определения гарантированного выравнивания реализован алгоритм статического анализа выражений абстрактного синтаксического дерева (AST) Clang. Алгоритм учитывает различные способы получения указателей и изменения адресов, в том числе:
+- Обращение к переменным-указателям и массивам с учётом характеристик их типов.
+- Получение адреса переменной или элемента массива.
+- Выполнение арифметических операций над указателями, включая сложение и вычитание смещений.
+- Преобразование указателей в целочисленные типы и последующее выполнение арифметических операций над полученными значениями.
+- Использование константных индексов и смещений для вычисления точного изменения адреса.
+- Получение указателей в результате вызовов стандартных функций динамического выделения памяти malloc, calloc и realloc.
 
-C-like languages use the [Clang](https://clang.llvm.org/) frontend. This
-component compiles C, C++, Objective-C, and Objective-C++ code into LLVM bitcode
--- and from there into object files, using LLVM.
+## Сборка
 
-Other components include:
-the [libc++ C++ standard library](https://libcxx.llvm.org),
-the [LLD linker](https://lld.llvm.org), and more.
+```bash
+  cmake -S llvm -B build   -DLLVM_ENABLE_PROJECTS="clang;clang-tools-extra"   -DCMAKE_BUILD_TYPE=Debug   -DLLVM_TARGETS_TO_BUILD="X86"   -G Ninja
 
-## Getting the Source Code and Building LLVM
+  ninja -C build clang-tidy
+```
 
-Consult the
-[Getting Started with LLVM](https://llvm.org/docs/GettingStarted.html#getting-the-source-code-and-building-llvm)
-page for information on building and running LLVM.
+## Запуск на примере
 
-For information on how to contribute to the LLVM project, please take a look at
-the [Contributing to LLVM](https://llvm.org/docs/Contributing.html) guide.
+```bash
+   ./build/bin/clang-tidy path/file.cpp -checks='-*,bugprone-misaligned-pointer-cast'   -- -std=c++17
+```
+или для анализа всего проекта (необходимо наличие compile_commands.json в build исследуемого проекта)
 
-## Getting in touch
+```bash
+   python3 ~/path/clang-tools-extra/clang-tidy/tool/run-clang-tidy.py -clang-tidy-binary ~/path/build/bin/clang-tidy -p build -checks='-*,bugprone-misaligned-pointer-cast' -j"$(nproc)"
+```
 
-Join the [LLVM Discourse forums](https://discourse.llvm.org/), [Discord
-chat](https://discord.gg/xS7Z362),
-[LLVM Office Hours](https://llvm.org/docs/GettingInvolved.html#office-hours) or
-[Regular sync-ups](https://llvm.org/docs/GettingInvolved.html#online-sync-ups).
+Ожидаемый вывод:
 
-The LLVM project has adopted a [code of conduct](https://llvm.org/docs/CodeOfConduct.html) for
-participants to all modes of communication within the project.
+```bash
+/PcapPlusPlus/3rdParty/LightPcapNg/LightPcapNg/src/light_internal.c:144:38: warning: casting from type 'uint32_t' (aka 'unsigned int') (guaranteed alignment 4) to type 'struct _light_section_header' (required alignment 8 bytes) may result in misaligned access [bugprone-misaligned-pointer-cast]
+  144 |         struct _light_section_header *shb = (struct _light_section_header *)section->block_body;
+      |                                             ^
+/PcapPlusPlus/3rdParty/LightPcapNg/LightPcapNg/src/light_internal.c:150:4: warning: casting from type 'struct _light_section_header' (guaranteed alignment 4) to type 'struct _light_section_header' (required alignment 8 bytes) may result in misaligned access [bugprone-misaligned-pointer-cast]
+  150 |                         shb->section_length = size;
+      |                         ^
+/PcapPlusPlus/3rdParty/LightPcapNg/LightPcapNg/src/light_internal.c:159:2: warning: casting from type 'struct _light_section_header' (guaranteed alignment 4) to type 'struct _light_section_header' (required alignment 8 bytes) may result in misaligned access [bugprone-misaligned-pointer-cast]
+  159 |         shb->section_length = size;
+      |         ^
+                 ^
+```
+
+
