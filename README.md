@@ -1,6 +1,6 @@
 # DevDays F2026 - #104 unaligned-ptr-cast-check
 
-[Ссылка на презентацию](https://docs.google.com/presentation/d/1jgbYJ8Thz0qmmFzTAorURpLIn7NYrscEJrCdKwXcGxk)
+[Ссылка на презентацию](https://docs.google.com/presentation/d/1vfzCb6PcbjtUhGF7Vk3Ig3CqOhUGiwXpLJ8cmvQXmNo)
 
 [Ссылка на видео](https://drive.google.com/file/d/1O3ZvcVlaxiAMHSAYOOJSRuRGnOTFKxjF/view?usp=drive_link)
 
